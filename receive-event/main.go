@@ -55,7 +55,7 @@ func handleMain(w http.ResponseWriter, r *http.Request) {
 		var wg sync.WaitGroup
 
 		// Generate multiple events within the list
-		count := rand.Intn(100) + 1
+		count := rand.Intn(10) + 1
 		errChan := make(chan error, count)
 
 		for i := 0; i < count; i++ {
