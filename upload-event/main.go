@@ -39,7 +39,8 @@ func updateEventStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	err := godotenv.Load()
+	//err := godotenv.Load()
+	err := godotenv.Load("/app/.env")
 	if err != nil {
 		log.Fatal("Error loading .env file")
 		return

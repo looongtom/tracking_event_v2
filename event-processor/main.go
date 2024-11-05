@@ -32,7 +32,7 @@ type TrackingEvent struct {
 }
 
 func updateEvent(event Event) (*Event, error) {
-	url := fmt.Sprintf("http://%s:%s/update-event", os.Getenv("SERVER_HOST_LOCAL"), os.Getenv("SERVER_PORT_UPDATE_EVENT"))
+	url := fmt.Sprintf("http://%s:%s/update-event", os.Getenv("SERVER_HOST"), os.Getenv("SERVER_PORT_UPDATE_EVENT"))
 	method := "POST"
 
 	timestamp := time.Unix(event.TimeStamp, 0).Unix()
@@ -80,13 +80,14 @@ func sendToDestination(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
+	fmt.Println(fmt.Sprintf("Tracking Event: %v", trackingEvent))
 	updatedEvent, err := updateEvent(trackingEvent.Event)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	clientOptions := options.Client().ApplyURI(fmt.Sprintf("mongodb://%s", os.Getenv("MONGO_URI_LOCAL")))
+	fmt.Println(fmt.Sprintf("URI: %s", fmt.Sprintf("mongodb://%s", os.Getenv("MONGO_URI"))))
+	clientOptions := options.Client().ApplyURI(fmt.Sprintf("mongodb://%s", os.Getenv("MONGO_URI")))
 	client, err := mongo.Connect(context.Background(), clientOptions)
 	if err != nil {
 		log.Fatal(err)
@@ -97,6 +98,14 @@ func sendToDestination(w http.ResponseWriter, r *http.Request) {
 			log.Fatalln(err.Error())
 		}
 	}(client, context.Background())
+
+	// Check the connection
+	err = client.Ping(context.Background(), nil)
+	if err != nil {
+		http.Error(w, "Failed to connect to MongoDB", http.StatusInternalServerError)
+		return
+	}
+	fmt.Println("Connected to MongoDB!")
 
 	db := client.Database(os.Getenv("MONGO_DB"))
 	collection := db.Collection(os.Getenv("MONGO_COLLECTION"))
@@ -125,20 +134,24 @@ func sendToDestination(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	}
+	fmt.Println(fmt.Sprintf("Filter: %v", filter))
 	opts := options.Update().SetUpsert(true)
 	resp, err := collection.UpdateOne(context.Background(), filter, update, opts)
 	if err != nil {
 		log.Printf("Error upserting document: %v", err)
 	}
-	_, err = fmt.Fprintf(w, "Updated %v documents", resp.ModifiedCount)
-	if err != nil {
+	fmt.Println(fmt.Sprintf("Updated: %d", resp.ModifiedCount))
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(trackingEvent); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 }
 
 func main() {
-	err := godotenv.Load()
+	//err := godotenv.Load()
+	err := godotenv.Load("/app/.env") //deploy staging
 	if err != nil {
 		log.Fatal("Error loading .env file")
 		return

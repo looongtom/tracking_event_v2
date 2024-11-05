@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	rate := vegeta.Rate{Freq: 100, Per: time.Second}
+	rate := vegeta.Rate{Freq: 5, Per: time.Second}
 	duration := 4 * time.Second
 	targeter := vegeta.NewStaticTargeter(vegeta.Target{
 		Method: "POST",

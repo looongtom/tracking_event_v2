@@ -21,8 +21,8 @@ var (
 	kafkaBroker string
 )
 
-func sendToEventProcessor(trackingEvent model.TrackingEvent) (*model.Event, error) {
-	url := fmt.Sprintf("http://%s:%s/send-destination", os.Getenv("SERVER_HOST_LOCAL"), os.Getenv("SERVER_PORT_EVENT_PROCESSOR"))
+func sendToEventProcessor(trackingEvent model.TrackingEvent) (*model.TrackingEvent, error) {
+	url := fmt.Sprintf("http://%s:%s/send-destination", os.Getenv("SERVER_HOST_EVENT_PROCESSOR"), os.Getenv("SERVER_PORT_EVENT_PROCESSOR"))
 	method := "POST"
 
 	timestamp := time.Unix(trackingEvent.Event.TimeStamp, 0).Unix()
@@ -30,7 +30,7 @@ func sendToEventProcessor(trackingEvent model.TrackingEvent) (*model.Event, erro
 	payload := strings.NewReader(fmt.Sprintf(`{"store_id": "%s","client_id": "%s","bucket_date": %d,"event_type": "%s","count": %d,"event": {"event_id": "%s","timestamp": %d,"status": "%s"}}`,
 		trackingEvent.StoreId, trackingEvent.UserId, trackingEvent.BucketDate, trackingEvent.EventType, trackingEvent.Count,
 		trackingEvent.Event.ID, timestamp, trackingEvent.Event.Status))
-
+	fmt.Println("Payload: ", payload)
 	client := &http.Client{}
 	req, err := http.NewRequest(method, url, payload)
 
@@ -54,7 +54,7 @@ func sendToEventProcessor(trackingEvent model.TrackingEvent) (*model.Event, erro
 
 	}
 
-	var response model.Event
+	var response model.TrackingEvent
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		fmt.Println(err)
@@ -64,14 +64,14 @@ func sendToEventProcessor(trackingEvent model.TrackingEvent) (*model.Event, erro
 }
 
 func main() {
-	//err := godotenv.Load("/app/.env") deploy staging
-	err := godotenv.Load(".env")
+	err := godotenv.Load("/app/.env") //deploy staging
+	//err := godotenv.Load(".env")
 	if err != nil {
 		log.Fatal("Error loading .env file")
 		return
 	}
 
-	kafkaBroker = os.Getenv("KAFKA_BROKER_LOCAL")
+	kafkaBroker = os.Getenv("KAFKA_BROKER")
 	topic = os.Getenv("KAFKA_TOPIC")
 	groupID = os.Getenv("KAFKA_GROUP_ID")
 
@@ -131,7 +131,6 @@ func main() {
 					fmt.Printf("Failed to deserialize message: %s\n", err)
 					continue
 				}
-				fmt.Printf("Received booking: %+v\n", tracking)
 
 				resp, err := sendToEventProcessor(model.TrackingEvent{
 					StoreId:    tracking.StoreId,

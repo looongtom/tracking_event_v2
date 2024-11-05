@@ -1,18 +1,16 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/joho/godotenv"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"receive-event/model"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -25,15 +23,6 @@ var (
 func handleMain(w http.ResponseWriter, r *http.Request) {
 	// log current time
 	fmt.Println(time.Now())
-
-	// Replace with your MongoDB connection details
-	clientOptions := options.Client().ApplyURI(fmt.Sprintf("mongodb://%s", os.Getenv("MONGO_URI_LOCAL")))
-	client, err := mongo.Connect(context.Background(), clientOptions)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer client.Disconnect(context.Background())
 
 	// Create a new Kafka producer
 	p, err := kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": kafkaBroker})
@@ -55,9 +44,16 @@ func handleMain(w http.ResponseWriter, r *http.Request) {
 		var wg sync.WaitGroup
 
 		// Generate multiple events within the list
-		count := rand.Intn(10) + 1
+		maxCount := os.Getenv("MAX_AMOUNT_EVENT")
+		maxValue, ok := strconv.Atoi(maxCount)
+		if ok != nil {
+			fmt.Println("Error: ", ok)
+			fmt.Println("set max value into 10")
+			maxValue = 10
+		}
+		count := rand.Intn(maxValue) + 1
 		errChan := make(chan error, count)
-
+		fmt.Println("Count: ", count)
 		for i := 0; i < count; i++ {
 			wg.Add(1)
 			go func(i int) {
@@ -65,12 +61,12 @@ func handleMain(w http.ResponseWriter, r *http.Request) {
 				tracking := model.TrackingEvent{
 					StoreId:    storeID,
 					UserId:     clientID,
-					BucketDate: bucketDate.Unix(),
+					BucketDate: bucketDate.UnixNano(),
 					EventType:  eventType,
 					Count:      1,
 					Event: model.Event{
 						ID:        fmt.Sprintf("evt%d", i+1),
-						TimeStamp: time.Now().Unix(),
+						TimeStamp: time.Now().UnixNano(),
 						Status:    randomStatus(),
 					},
 				}
@@ -103,7 +99,7 @@ func handleMain(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		fmt.Println("Message produced successfully!")
+		fmt.Println("===========================Message produced successfully!=============================")
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -111,13 +107,13 @@ func handleMain(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	//err := godotenv.Load("/app/.env") deploy staging
-	err := godotenv.Load(".env")
+	err := godotenv.Load("/app/.env")
+	//err := godotenv.Load(".env")
 	if err != nil {
 		log.Fatal("Error loading .env file")
 		return
 	}
-	kafkaBroker = os.Getenv("KAFKA_BROKER_LOCAL")
+	kafkaBroker = os.Getenv("KAFKA_BROKER")
 	topic = os.Getenv("KAFKA_TOPIC")
 
 	http.HandleFunc("/receive-event", handleMain)
