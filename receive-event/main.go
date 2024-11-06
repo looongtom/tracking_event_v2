@@ -45,13 +45,12 @@ func handleMain(w http.ResponseWriter, r *http.Request) {
 
 		// Generate multiple events within the list
 		maxCount := os.Getenv("MAX_AMOUNT_EVENT")
-		maxValue, ok := strconv.Atoi(maxCount)
+		count, ok := strconv.Atoi(maxCount)
 		if ok != nil {
 			fmt.Println("Error: ", ok)
 			fmt.Println("set max value into 10")
-			maxValue = 10
+			count = 10
 		}
-		count := rand.Intn(maxValue) + 1
 		errChan := make(chan error, count)
 		fmt.Println("Count: ", count)
 		for i := 0; i < count; i++ {
