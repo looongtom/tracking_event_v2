@@ -159,20 +159,17 @@ func generateMockData(nStores, mEventTypes, mEvents, nClients int, bucketDate ti
 			eventType := eventTypes[rand.Intn(mEventTypes)]
 			eventID := fmt.Sprintf("evt%d", i+1)
 			timestamp := bucketDate.Add(time.Duration(rand.Intn(24)) * time.Hour).Add(time.Duration(rand.Intn(60)) * time.Minute)
-			status := []string{"success", "failed"}[rand.Intn(2)]
 
-			event := model.Event{
-				ID:        eventID,
-				TimeStamp: timestamp.Unix(),
-				Status:    status,
+			event := model.EventDetails{
+				EventID:   eventID,
+				Timestamp: timestamp.Unix(),
+				EventType: eventType,
 			}
-			trackingEvent := model.TrackingEvent{
-				StoreId:    storeID,
-				UserId:     clientID,
-				BucketDate: bucketDate.UnixNano(),
-				EventType:  eventType,
-				Count:      1,
-				Event:      event,
+			trackingEvent := model.EventRecordRequestV3{
+				StoreID:     storeID,
+				ClientID:    clientID,
+				BucketDate:  bucketDate.Format("02-01-2006"),
+				EventDetail: event,
 			}
 			serializedBookingRequest, err := json.Marshal(trackingEvent)
 			if err != nil {

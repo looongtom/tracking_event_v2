@@ -55,7 +55,7 @@ services:
       - STORE_ID=store2
       - CLIENT_ID=client2
       - EVENT_TYPE=add_to_cart
-      - MAX_AMOUNT_EVENT=100
+      - MAX_AMOUNT_EVENT=2000
       - TOTAL_STORE=5
       - TOTAL_CLIENT=5
       - TOTAL_EVENT_TYPE=5
@@ -126,7 +126,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - /mnt/d/kienletv/prometheus-grafana/prometheus:/etc/prometheus
+      - /mnt/c/xipat/tracking_event_v2/tracking_event_v2/prometheus:/etc/prometheus
       - prometheus-data:/prometheus
 #    sudo mount --make-rshared /
     restart: unless-stopped
