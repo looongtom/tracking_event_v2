@@ -10,14 +10,19 @@ import (
 	"time"
 )
 
-type Event struct {
-	ID        string `json:"event_id"`
-	TimeStamp int64  `json:"timestamp"`
-	Status    string `json:"status"`
+type EventRecord struct {
+	ID                string `json:"_id"`
+	EventID           string `json:"event_id"`
+	ClientID          string `json:"client_id"`
+	StoreID           string `json:"store_id"`
+	EventType         string `json:"event_type"`
+	StatusDestination string `json:"status_destination"`
+	Timestamp         int64  `json:"timestamp"`
+	BucketDate        string `json:"bucket_date"`
 }
 
 func updateEventStatus(w http.ResponseWriter, r *http.Request) {
-	var event Event
+	var event EventRecord
 
 	// Decode the request body into the event struct
 	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
@@ -26,7 +31,7 @@ func updateEventStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the status of the event
-	event.Status = "updated"
+	event.StatusDestination = "updated"
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -39,8 +44,8 @@ func updateEventStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	//err := godotenv.Load()
-	err := godotenv.Load("/app/.env")
+	err := godotenv.Load()
+	//err := godotenv.Load("/app/.env")
 	if err != nil {
 		log.Fatal("Error loading .env file")
 		return

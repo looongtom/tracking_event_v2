@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/joho/godotenv"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"io"
@@ -16,29 +15,25 @@ import (
 	"time"
 )
 
-type Event struct {
-	ID        string `json:"event_id"`
-	TimeStamp int64  `json:"timestamp"`
-	Status    string `json:"status"`
+type EventRecord struct {
+	ID                string `json:"_id" bson:"id"`
+	ClientID          string `json:"client_id" bson:"client_id"`
+	StoreID           string `json:"store_id" bson:"store_id"`
+	EventType         string `json:"event_type" bson:"event_type"`
+	StatusDestination string `json:"status_destination" bson:"status_destination"`
+	EventID           string `json:"event_id" bson:"event_id"`
+	Timestamp         int64  `json:"timestamp" bson:"timestamp"`
+	BucketDate        string `json:"bucket_date" bson:"bucket_date"`
 }
 
-type TrackingEvent struct {
-	StoreId    string `json:"store_id"`
-	UserId     string `json:"client_id"`
-	BucketDate int64  `json:"bucket_date"`
-	EventType  string `json:"event_type"`
-	Count      int    `json:"count"`
-	Event      Event  `json:"event"`
-}
-
-func updateEvent(event Event) (*Event, error) {
+func updateEvent(trackingEvent EventRecord) (*EventRecord, error) {
 	url := fmt.Sprintf("http://%s:%s/update-event", os.Getenv("SERVER_UPDATE_EVENT"), os.Getenv("SERVER_PORT_UPDATE_EVENT"))
 	method := "POST"
 
-	timestamp := time.Unix(event.TimeStamp, 0).Unix()
-
-	payload := strings.NewReader(fmt.Sprintf(`{"event_id": "%s", "timestamp": %d, "status": "%s"}`, event.ID, timestamp, event.Status))
-
+	payload := strings.NewReader(
+		fmt.Sprintf(`{"event_id": "%s","client_id": "%s","store_id": "%s","bucket_date": "%s","event_type": "%s","status_destination": "%s","timestamp": %d}`,
+			trackingEvent.EventID, trackingEvent.ClientID, trackingEvent.StoreID, trackingEvent.BucketDate, trackingEvent.EventType, trackingEvent.StatusDestination, trackingEvent.Timestamp))
+	fmt.Println("Payload: ", payload)
 	client := &http.Client{}
 	req, err := http.NewRequest(method, url, payload)
 
@@ -50,7 +45,7 @@ func updateEvent(event Event) (*Event, error) {
 
 	res, err := client.Do(req)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("error call api: ", err)
 		return nil, err
 
 	}
@@ -63,30 +58,62 @@ func updateEvent(event Event) (*Event, error) {
 
 	}
 
-	var response Event
+	var response EventRecord
 	err = json.Unmarshal(body, &response)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("error unmarshal", err)
 		return nil, err
 	}
 	return &response, nil
 }
+func sendToDestination(client *mongo.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var trackingEvent EventRecord
 
-func sendToDestination(w http.ResponseWriter, r *http.Request) {
-	var trackingEvent TrackingEvent
+		// Decode the request body into the trackingEvent struct
+		if err := json.NewDecoder(r.Body).Decode(&trackingEvent); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		fmt.Println(fmt.Sprintf("Tracking Event: %v", trackingEvent))
+		updatedEvent, err := updateEvent(trackingEvent)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		fmt.Println(fmt.Sprintf("URI: %s", fmt.Sprintf("mongodb://%s", os.Getenv("MONGO_URI"))))
 
-	// Decode the request body into the trackingEvent struct
-	if err := json.NewDecoder(r.Body).Decode(&trackingEvent); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		//insert trackingEvent in db
+
+		trackingEvent.StatusDestination = updatedEvent.StatusDestination
+
+		fmt.Println(fmt.Sprintf("Tracking event: %v", trackingEvent))
+
+		db := client.Database(os.Getenv("MONGO_DB"))
+		collection := db.Collection(os.Getenv("MONGO_COLLECTION"))
+
+		resp, err := collection.InsertOne(context.Background(), trackingEvent)
+		if err != nil {
+			log.Printf("Error upserting document: %v", err)
+		}
+		fmt.Println(fmt.Sprintf("Updated: %d", resp.InsertedID))
+		fmt.Println("time: ", time.Now())
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(trackingEvent); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 	}
-	fmt.Println(fmt.Sprintf("Tracking Event: %v", trackingEvent))
-	updatedEvent, err := updateEvent(trackingEvent.Event)
+}
+
+func main() {
+	//err := godotenv.Load()
+	err := godotenv.Load("/app/.env") //deploy staging
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Fatal("Error loading .env file")
 		return
 	}
-	fmt.Println(fmt.Sprintf("URI: %s", fmt.Sprintf("mongodb://%s", os.Getenv("MONGO_URI"))))
 	clientOptions := options.Client().ApplyURI(fmt.Sprintf("mongodb://%s", os.Getenv("MONGO_URI")))
 	client, err := mongo.Connect(context.Background(), clientOptions)
 	if err != nil {
@@ -102,62 +129,11 @@ func sendToDestination(w http.ResponseWriter, r *http.Request) {
 	// Check the connection
 	err = client.Ping(context.Background(), nil)
 	if err != nil {
-		http.Error(w, "Failed to connect to MongoDB", http.StatusInternalServerError)
-		return
+		log.Fatal(err)
 	}
 	fmt.Println("Connected to MongoDB!")
 
-	db := client.Database(os.Getenv("MONGO_DB"))
-	collection := db.Collection(os.Getenv("MONGO_COLLECTION"))
-	//insert trackingEvent in db
-	filter := bson.M{
-		"store_id":    trackingEvent.StoreId,
-		"client_id":   trackingEvent.UserId,
-		"bucket_date": trackingEvent.BucketDate,
-		"event_type":  trackingEvent.EventType,
-	}
-	update := bson.M{
-		"$setOnInsert": bson.M{
-			"store_id":    trackingEvent.StoreId,
-			"client_id":   trackingEvent.UserId,
-			"bucket_date": trackingEvent.BucketDate,
-			"event_type":  trackingEvent.EventType,
-		},
-		"$inc": bson.M{
-			"count": trackingEvent.Count, // Increment the count field by 1
-		},
-		"$push": bson.M{
-			"list_event": bson.M{
-				"event_id":           updatedEvent.ID,
-				"timestamp":          updatedEvent.TimeStamp,
-				"status_destination": updatedEvent.Status,
-			},
-		},
-	}
-	fmt.Println(fmt.Sprintf("Filter: %v", filter))
-	opts := options.Update().SetUpsert(true)
-	resp, err := collection.UpdateOne(context.Background(), filter, update, opts)
-	if err != nil {
-		log.Printf("Error upserting document: %v", err)
-	}
-	fmt.Println(fmt.Sprintf("Updated: %d", resp.ModifiedCount))
-	fmt.Println("time: ", time.Now())
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(trackingEvent); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-}
-
-func main() {
-	//err := godotenv.Load()
-	err := godotenv.Load("/app/.env") //deploy staging
-	if err != nil {
-		log.Fatal("Error loading .env file")
-		return
-	}
-	http.HandleFunc("/send-destination", sendToDestination)
+	http.HandleFunc("/send-destination", sendToDestination(client))
 	fmt.Println(fmt.Sprintf("Server is listening on port %v...", os.Getenv("SERVER_PORT_EVENT_PROCESSOR")))
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%v", os.Getenv("SERVER_PORT_EVENT_PROCESSOR")),

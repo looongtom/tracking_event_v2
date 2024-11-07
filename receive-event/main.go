@@ -161,20 +161,17 @@ func generateMockData(nStores, mEventTypes, mEvents, nClients int, bucketDate ti
 			timestamp := bucketDate.Add(time.Duration(rand.Intn(24)) * time.Hour).Add(time.Duration(rand.Intn(60)) * time.Minute)
 			status := []string{"success", "failed"}[rand.Intn(2)]
 
-			event := model.Event{
-				ID:        eventID,
-				TimeStamp: timestamp.Unix(),
-				Status:    status,
+			sentEvent := model.EventRecord{
+				ID:                eventID,
+				ClientID:          clientID,
+				StoreID:           storeID,
+				EventType:         eventType,
+				StatusDestination: status,
+				EventID:           eventID,
+				Timestamp:         timestamp.Unix(),
+				BucketDate:        bucketDate.Format("02-01-2006"),
 			}
-			trackingEvent := model.TrackingEvent{
-				StoreId:    storeID,
-				UserId:     clientID,
-				BucketDate: bucketDate.UnixNano(),
-				EventType:  eventType,
-				Count:      1,
-				Event:      event,
-			}
-			serializedBookingRequest, err := json.Marshal(trackingEvent)
+			serializedBookingRequest, err := json.Marshal(sentEvent)
 			if err != nil {
 				//http.Error(w, fmt.Sprintf("Failed to serialize booking request: %s", err), http.StatusInternalServerError)
 				errChan <- fmt.Errorf("Failed to serialize booking request: %s", err)
@@ -214,6 +211,7 @@ func main() {
 	topic = os.Getenv("KAFKA_TOPIC")
 
 	http.HandleFunc("/receive-event", handleMain)
+	http.HandleFunc("/receive-event-v2", handleMainV2)
 	fmt.Println(fmt.Sprintf("Server is listening on port %v...", os.Getenv("SERVER_PORT_RECEIVE_EVENT")))
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%v", os.Getenv("SERVER_PORT_RECEIVE_EVENT")),
