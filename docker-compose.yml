@@ -48,8 +48,17 @@ services:
       - kafka-broker
     networks:
       - custom_network
-    env_file:
-      - .env
+    environment:
+      - KAFKA_BROKER=kafka-broker:9092
+      - KAFKA_TOPIC=tracking-event
+      - SERVER_PORT_RECEIVE_EVENT=8081
+      - STORE_ID=store2
+      - CLIENT_ID=client2
+      - EVENT_TYPE=add_to_cart
+      - MAX_AMOUNT_EVENT=100
+      - TOTAL_STORE=5
+      - TOTAL_CLIENT=5
+      - TOTAL_EVENT_TYPE=5
 
   upload-event:
     build:
@@ -62,8 +71,8 @@ services:
       - kafka-broker
     networks:
       - custom_network
-    env_file:
-      - .env
+    environment:
+      - SERVER_PORT_UPDATE_EVENT=8083
 
   event-processor:
     build:
@@ -78,8 +87,13 @@ services:
       - upload-event
     networks:
       - custom_network
-    env_file:
-      - .env
+    environment:
+      - SERVER_PORT_EVENT_PROCESSOR=8082
+      - SERVER_UPDATE_EVENT=upload-event
+      - SERVER_PORT_UPDATE_EVENT=8083
+      - MONGO_URI=mongo:27017
+      - MONGO_DB=test
+      - MONGO_COLLECTION=tracking_event
 
   kafka-listener:
     build:
@@ -91,8 +105,12 @@ services:
       - event-processor
     networks:
       - custom_network
-    env_file:
-      - .env
+    environment:
+      - KAFKA_BROKER=kafka-broker:9092
+      - KAFKA_TOPIC=tracking-event
+      - KAFKA_GROUP_ID=tracking-event-group
+      - SERVER_HOST_EVENT_PROCESSOR=event-processor
+      - SERVER_PORT_EVENT_PROCESSOR=8082
     deploy:
       resources:
         limits:

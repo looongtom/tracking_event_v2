@@ -32,7 +32,7 @@ type TrackingEvent struct {
 }
 
 func updateEvent(event Event) (*Event, error) {
-	url := fmt.Sprintf("http://%s:%s/update-event", os.Getenv("SERVER_HOST"), os.Getenv("SERVER_PORT_UPDATE_EVENT"))
+	url := fmt.Sprintf("http://%s:%s/update-event", os.Getenv("SERVER_UPDATE_EVENT"), os.Getenv("SERVER_PORT_UPDATE_EVENT"))
 	method := "POST"
 
 	timestamp := time.Unix(event.TimeStamp, 0).Unix()
@@ -141,6 +141,7 @@ func sendToDestination(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error upserting document: %v", err)
 	}
 	fmt.Println(fmt.Sprintf("Updated: %d", resp.ModifiedCount))
+	fmt.Println("time: ", time.Now())
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(trackingEvent); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

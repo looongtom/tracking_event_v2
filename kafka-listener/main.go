@@ -75,6 +75,10 @@ func main() {
 	topic = os.Getenv("KAFKA_TOPIC")
 	groupID = os.Getenv("KAFKA_GROUP_ID")
 
+	fmt.Println("Kafka Broker: ", kafkaBroker)
+	fmt.Println("Kafka Topic: ", topic)
+	fmt.Println("Kafka Group ID: ", groupID)
+
 	kafkaBrokerServer, err := kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": kafkaBroker})
 	if err != nil {
 		fmt.Printf("Failed to create producer: %s\n", err)
