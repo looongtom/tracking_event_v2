@@ -31,13 +31,34 @@ type TrackingEvent struct {
 	Event      Event  `json:"event"`
 }
 
-func updateEvent(event Event) (*Event, error) {
+type EventRecordV3 struct {
+	ClientID    string         `json:"client_id"`
+	StoreID     string         `json:"store_id"`
+	BucketDate  string         `json:"bucket_date"`
+	ListSuccess []EventDetails `json:"list_success"`
+	ListFailure []EventDetails `json:"list_failure"`
+}
+type EventRecordRequestV3 struct {
+	ClientID    string       `json:"client_id"`
+	StoreID     string       `json:"store_id"`
+	BucketDate  string       `json:"bucket_date"`
+	Status      string       `json:"status"`
+	EventDetail EventDetails `json:"event"`
+}
+
+type EventDetails struct {
+	EventID   string `json:"event_id"`
+	Timestamp int64  `json:"timestamp"`
+	EventType string `json:"event_type"`
+}
+
+func updateEvent(event EventRecordRequestV3) (*EventRecordRequestV3, error) {
 	url := fmt.Sprintf("http://%s:%s/update-event", os.Getenv("SERVER_UPDATE_EVENT"), os.Getenv("SERVER_PORT_UPDATE_EVENT"))
 	method := "POST"
 
-	timestamp := time.Unix(event.TimeStamp, 0).Unix()
-
-	payload := strings.NewReader(fmt.Sprintf(`{"event_id": "%s", "timestamp": %d, "status": "%s"}`, event.ID, timestamp, event.Status))
+	payload := strings.NewReader(
+		fmt.Sprintf(`{"client_id": "%s","store_id": "%s","bucket_date": "%s","event":{"event_type": "%s","timestamp": %d}}`,
+			event.ClientID, event.StoreID, event.BucketDate, event.EventDetail.EventType, event.EventDetail.Timestamp))
 
 	client := &http.Client{}
 	req, err := http.NewRequest(method, url, payload)
@@ -63,7 +84,7 @@ func updateEvent(event Event) (*Event, error) {
 
 	}
 
-	var response Event
+	var response EventRecordRequestV3
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		fmt.Println(err)
@@ -73,7 +94,7 @@ func updateEvent(event Event) (*Event, error) {
 }
 
 func sendToDestination(w http.ResponseWriter, r *http.Request) {
-	var trackingEvent TrackingEvent
+	var trackingEvent EventRecordRequestV3
 
 	// Decode the request body into the trackingEvent struct
 	if err := json.NewDecoder(r.Body).Decode(&trackingEvent); err != nil {
@@ -81,7 +102,7 @@ func sendToDestination(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fmt.Println(fmt.Sprintf("Tracking Event: %v", trackingEvent))
-	updatedEvent, err := updateEvent(trackingEvent.Event)
+	updatedEvent, err := updateEvent(trackingEvent)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -109,36 +130,46 @@ func sendToDestination(w http.ResponseWriter, r *http.Request) {
 
 	db := client.Database(os.Getenv("MONGO_DB"))
 	collection := db.Collection(os.Getenv("MONGO_COLLECTION"))
-	//insert trackingEvent in db
+	//upsert event in db
 	filter := bson.M{
-		"store_id":    trackingEvent.StoreId,
-		"client_id":   trackingEvent.UserId,
+		"store_id":    trackingEvent.StoreID,
+		"client_id":   trackingEvent.ClientID,
 		"bucket_date": trackingEvent.BucketDate,
-		"event_type":  trackingEvent.EventType,
 	}
-	update := bson.M{
-		"$setOnInsert": bson.M{
-			"store_id":    trackingEvent.StoreId,
-			"client_id":   trackingEvent.UserId,
-			"bucket_date": trackingEvent.BucketDate,
-			"event_type":  trackingEvent.EventType,
-		},
-		"$inc": bson.M{
-			"count": trackingEvent.Count, // Increment the count field by 1
-		},
-		"$push": bson.M{
-			"list_event": bson.M{
-				"event_id":           updatedEvent.ID,
-				"timestamp":          updatedEvent.TimeStamp,
-				"status_destination": updatedEvent.Status,
+
+	event := EventDetails{
+		EventID:   trackingEvent.EventDetail.EventID,
+		Timestamp: trackingEvent.EventDetail.Timestamp,
+		EventType: trackingEvent.EventDetail.EventType,
+	}
+
+	var update bson.M
+	if updatedEvent.Status == "success" {
+		update = bson.M{
+			"$push": bson.M{"list_success": event},
+			"$setOnInsert": bson.M{
+				"client_id":   trackingEvent.ClientID,
+				"store_id":    trackingEvent.StoreID,
+				"bucket_date": trackingEvent.BucketDate,
 			},
-		},
+		}
+	} else {
+		update = bson.M{
+			"$push": bson.M{"list_failure": event},
+			"$setOnInsert": bson.M{
+				"client_id":   trackingEvent.ClientID,
+				"store_id":    trackingEvent.StoreID,
+				"bucket_date": trackingEvent.BucketDate,
+			},
+		}
 	}
-	fmt.Println(fmt.Sprintf("Filter: %v", filter))
+
+	// Perform the upsert operation
 	opts := options.Update().SetUpsert(true)
 	resp, err := collection.UpdateOne(context.Background(), filter, update, opts)
 	if err != nil {
-		log.Printf("Error upserting document: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	fmt.Println(fmt.Sprintf("Updated: %d", resp.ModifiedCount))
 	fmt.Println("time: ", time.Now())

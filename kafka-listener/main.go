@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"time"
 )
 
 var (
@@ -21,15 +20,14 @@ var (
 	kafkaBroker string
 )
 
-func sendToEventProcessor(trackingEvent model.TrackingEvent) (*model.TrackingEvent, error) {
+func sendToEventProcessor(trackingEvent model.EventRecordRequestV3) (*model.EventRecordRequestV3, error) {
 	url := fmt.Sprintf("http://%s:%s/send-destination", os.Getenv("SERVER_HOST_EVENT_PROCESSOR"), os.Getenv("SERVER_PORT_EVENT_PROCESSOR"))
 	method := "POST"
 
-	timestamp := time.Unix(trackingEvent.Event.TimeStamp, 0).Unix()
+	payload := strings.NewReader(
+		fmt.Sprintf(`{"client_id": "%s","store_id": "%s","bucket_date": "%s","event":{"event_type": "%s","timestamp": %d}}`,
+			trackingEvent.ClientID, trackingEvent.StoreID, trackingEvent.BucketDate, trackingEvent.EventDetail.EventType, trackingEvent.EventDetail.Timestamp))
 
-	payload := strings.NewReader(fmt.Sprintf(`{"store_id": "%s","client_id": "%s","bucket_date": %d,"event_type": "%s","count": %d,"event": {"event_id": "%s","timestamp": %d,"status": "%s"}}`,
-		trackingEvent.StoreId, trackingEvent.UserId, trackingEvent.BucketDate, trackingEvent.EventType, trackingEvent.Count,
-		trackingEvent.Event.ID, timestamp, trackingEvent.Event.Status))
 	fmt.Println("Payload: ", payload)
 	client := &http.Client{}
 	req, err := http.NewRequest(method, url, payload)
@@ -54,7 +52,7 @@ func sendToEventProcessor(trackingEvent model.TrackingEvent) (*model.TrackingEve
 
 	}
 
-	var response model.TrackingEvent
+	var response model.EventRecordRequestV3
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		fmt.Println(err)
@@ -129,21 +127,14 @@ func main() {
 			switch e := ev.(type) {
 			case *kafka.Message:
 				// Process the consumed message
-				var tracking model.TrackingEvent
+				var tracking model.EventRecordRequestV3
 				err := json.Unmarshal(e.Value, &tracking)
 				if err != nil {
 					fmt.Printf("Failed to deserialize message: %s\n", err)
 					continue
 				}
 
-				resp, err := sendToEventProcessor(model.TrackingEvent{
-					StoreId:    tracking.StoreId,
-					UserId:     tracking.UserId,
-					BucketDate: tracking.BucketDate,
-					EventType:  tracking.EventType,
-					Count:      tracking.Count,
-					Event:      tracking.Event,
-				})
+				resp, err := sendToEventProcessor(tracking)
 				if err != nil {
 					fmt.Printf("Failed to send to event processor: %s\n", err)
 					continue

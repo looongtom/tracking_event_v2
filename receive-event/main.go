@@ -213,7 +213,7 @@ func main() {
 	kafkaBroker = os.Getenv("KAFKA_BROKER")
 	topic = os.Getenv("KAFKA_TOPIC")
 
-	http.HandleFunc("/receive-event", handleMain)
+	http.HandleFunc("/receive-event", handleMainV2)
 	fmt.Println(fmt.Sprintf("Server is listening on port %v...", os.Getenv("SERVER_PORT_RECEIVE_EVENT")))
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%v", os.Getenv("SERVER_PORT_RECEIVE_EVENT")),

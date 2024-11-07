@@ -24,3 +24,23 @@ type TrackingEvent struct {
 	Count      int    `json:"count"`
 	Event      Event  `json:"event"`
 }
+
+type EventRecordV3 struct {
+	ClientID    string         `json:"client_id"`
+	StoreID     string         `json:"store_id"`
+	BucketDate  string         `json:"bucket_date"`
+	ListSuccess []EventDetails `json:"list_success"`
+	ListFailure []EventDetails `json:"list_failure"`
+}
+type EventRecordRequestV3 struct {
+	ClientID    string       `json:"client_id"`
+	StoreID     string       `json:"store_id"`
+	BucketDate  string       `json:"bucket_date"`
+	EventDetail EventDetails `json:"event"`
+}
+
+type EventDetails struct {
+	EventID   string `json:"event_id"`
+	Timestamp int64  `json:"timestamp"`
+	EventType string `json:"event_type"`
+}
