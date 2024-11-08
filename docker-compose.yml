@@ -8,6 +8,11 @@ services:
       - ALLOW_ANONYMOUS_LOGIN=yes
     networks:
       - custom_network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
 
   kafka-broker:
     container_name: kafka-brooker
@@ -27,6 +32,11 @@ services:
       - kafka-zookeeper
     networks:
       - custom_network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.5"
 
 
   mongo:
@@ -114,11 +124,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'       # Limit kafka-listener to 0.25 CPU
-          memory: 128M       # Limit kafka-listener to 128 MB
-        reservations:
-          cpus: '0.1'        # Reserve 0.1 CPU
-          memory: 64M        # Reserve 64 MB
+          memory: 512M
+          cpus: "0.5"
 
   prometheus:
     image: prom/prometheus:latest
