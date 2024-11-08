@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"time"
@@ -15,9 +17,22 @@ type Event struct {
 	TimeStamp int64  `json:"timestamp"`
 	Status    string `json:"status"`
 }
+type EventRecordRequestV3 struct {
+	ClientID    string       `json:"client_id"`
+	StoreID     string       `json:"store_id"`
+	BucketDate  string       `json:"bucket_date"`
+	Status      string       `json:"status"`
+	EventDetail EventDetails `json:"event"`
+}
+
+type EventDetails struct {
+	EventID   string `json:"event_id"`
+	Timestamp int64  `json:"timestamp"`
+	EventType string `json:"event_type"`
+}
 
 func updateEventStatus(w http.ResponseWriter, r *http.Request) {
-	var event Event
+	var event EventRecordRequestV3
 
 	// Decode the request body into the event struct
 	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
@@ -26,8 +41,9 @@ func updateEventStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the status of the event
-	event.Status = "updated"
-
+	status := []string{"success", "failed"}[rand.Intn(2)]
+	event.Status = status
+	event.EventDetail.EventID = uuid.New().String()
 	time.Sleep(500 * time.Millisecond)
 
 	// Encode the updated event back to the response

@@ -133,7 +133,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - /mnt/c/xipat/tracking_event_v2/tracking_event_v2/prometheus:/etc/prometheus
+      - /mnt/d/tracking_event_v2/prometheus:/etc/prometheus
       - prometheus-data:/prometheus
 #    sudo mount --make-rshared /
     restart: unless-stopped

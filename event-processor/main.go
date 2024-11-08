@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -183,11 +182,11 @@ func sendToDestination(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	//err := godotenv.Load()
-	err := godotenv.Load("/app/.env") //deploy staging
-	if err != nil {
-		log.Fatal("Error loading .env file")
-		return
-	}
+	//err := godotenv.Load("/app/.env") //deploy staging
+	//if err != nil {
+	//	log.Fatal("Error loading .env file")
+	//	return
+	//}
 	http.HandleFunc("/send-destination", sendToDestination)
 	fmt.Println(fmt.Sprintf("Server is listening on port %v...", os.Getenv("SERVER_PORT_EVENT_PROCESSOR")))
 	server := &http.Server{
