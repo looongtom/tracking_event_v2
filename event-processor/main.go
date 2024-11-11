@@ -92,20 +92,107 @@ func updateEvent(event EventRecordRequestV3) (*EventRecordRequestV3, error) {
 	return &response, nil
 }
 
-func sendToDestination(w http.ResponseWriter, r *http.Request) {
-	var trackingEvent EventRecordRequestV3
+func sendToDestination(client *mongo.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var trackingEvent EventRecordRequestV3
 
-	// Decode the request body into the trackingEvent struct
-	if err := json.NewDecoder(r.Body).Decode(&trackingEvent); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		// Decode the request body into the trackingEvent struct
+		if err := json.NewDecoder(r.Body).Decode(&trackingEvent); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		fmt.Println(fmt.Sprintf("Tracking Event: %v", trackingEvent))
+		updatedEvent, err := updateEvent(trackingEvent)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		db := client.Database(os.Getenv("MONGO_DB"))
+		collection := db.Collection(os.Getenv("MONGO_COLLECTION"))
+		//upsert event in db
+		filter := bson.M{
+			"store_id":    trackingEvent.StoreID,
+			"client_id":   trackingEvent.ClientID,
+			"bucket_date": trackingEvent.BucketDate,
+		}
+
+		event := EventDetails{
+			EventID:   trackingEvent.EventDetail.EventID,
+			Timestamp: trackingEvent.EventDetail.Timestamp,
+			EventType: trackingEvent.EventDetail.EventType,
+		}
+
+		var update bson.M
+		if updatedEvent.Status == "success" {
+			update = bson.M{
+				"$push": bson.M{"list_success": event},
+				"$setOnInsert": bson.M{
+					"client_id":   trackingEvent.ClientID,
+					"store_id":    trackingEvent.StoreID,
+					"bucket_date": trackingEvent.BucketDate,
+				},
+			}
+		} else {
+			update = bson.M{
+				"$push": bson.M{"list_failure": event},
+				"$setOnInsert": bson.M{
+					"client_id":   trackingEvent.ClientID,
+					"store_id":    trackingEvent.StoreID,
+					"bucket_date": trackingEvent.BucketDate,
+				},
+			}
+		}
+
+		// Perform the upsert operation
+		opts := options.Update().SetUpsert(true)
+		resp, err := collection.UpdateOne(context.Background(), filter, update, opts)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		fmt.Println(fmt.Sprintf("Updated: %d", resp.ModifiedCount))
+		fmt.Println("time: ", time.Now())
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(trackingEvent); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
-	fmt.Println(fmt.Sprintf("Tracking Event: %v", trackingEvent))
-	updatedEvent, err := updateEvent(trackingEvent)
+}
+
+func checkAndCreateCollection(client *mongo.Client, dbName, collectionName string) (bool, error) {
+	// List collections in the database
+	db := client.Database(dbName)
+	collections, err := db.ListCollectionNames(context.TODO(), map[string]interface{}{})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return false, fmt.Errorf("failed to list collections: %w", err)
 	}
+
+	// Check if the collection already exists
+	for _, col := range collections {
+		if col == collectionName {
+			return true, nil
+		}
+	}
+
+	// Create the collection if it doesn't exist
+	err = db.CreateCollection(context.TODO(), collectionName)
+	if err != nil {
+		return false, fmt.Errorf("failed to create collection: %w", err)
+	}
+
+	return false, nil
+}
+
+func main() {
+	//err := godotenv.Load()
+	//err := godotenv.Load("/app/.env") //deploy staging
+	//if err != nil {
+	//	log.Fatal("Error loading .env file")
+	//	return
+	//}
+
 	fmt.Println(fmt.Sprintf("URI: %s", fmt.Sprintf("mongodb://%s", os.Getenv("MONGO_URI"))))
 	clientOptions := options.Client().ApplyURI(fmt.Sprintf("mongodb://%s", os.Getenv("MONGO_URI")))
 	client, err := mongo.Connect(context.Background(), clientOptions)
@@ -122,72 +209,25 @@ func sendToDestination(w http.ResponseWriter, r *http.Request) {
 	// Check the connection
 	err = client.Ping(context.Background(), nil)
 	if err != nil {
-		http.Error(w, "Failed to connect to MongoDB", http.StatusInternalServerError)
-		return
+		log.Fatal(err)
 	}
 	fmt.Println("Connected to MongoDB!")
 
-	db := client.Database(os.Getenv("MONGO_DB"))
-	collection := db.Collection(os.Getenv("MONGO_COLLECTION"))
-	//upsert event in db
-	filter := bson.M{
-		"store_id":    trackingEvent.StoreID,
-		"client_id":   trackingEvent.ClientID,
-		"bucket_date": trackingEvent.BucketDate,
-	}
+	dbName := os.Getenv("MONGO_DB")
+	collectionName := os.Getenv("MONGO_COLLECTION")
 
-	event := EventDetails{
-		EventID:   trackingEvent.EventDetail.EventID,
-		Timestamp: trackingEvent.EventDetail.Timestamp,
-		EventType: trackingEvent.EventDetail.EventType,
-	}
-
-	var update bson.M
-	if updatedEvent.Status == "success" {
-		update = bson.M{
-			"$push": bson.M{"list_success": event},
-			"$setOnInsert": bson.M{
-				"client_id":   trackingEvent.ClientID,
-				"store_id":    trackingEvent.StoreID,
-				"bucket_date": trackingEvent.BucketDate,
-			},
-		}
-	} else {
-		update = bson.M{
-			"$push": bson.M{"list_failure": event},
-			"$setOnInsert": bson.M{
-				"client_id":   trackingEvent.ClientID,
-				"store_id":    trackingEvent.StoreID,
-				"bucket_date": trackingEvent.BucketDate,
-			},
-		}
-	}
-
-	// Perform the upsert operation
-	opts := options.Update().SetUpsert(true)
-	resp, err := collection.UpdateOne(context.Background(), filter, update, opts)
+	collectionExists, err := checkAndCreateCollection(client, dbName, collectionName)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	fmt.Println(fmt.Sprintf("Updated: %d", resp.ModifiedCount))
-	fmt.Println("time: ", time.Now())
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(trackingEvent); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		log.Fatalf("Failed to check or create collection: %s", err)
 	}
 
-}
+	if collectionExists {
+		fmt.Printf("Collection %s already exists in database %s\n", collectionName, dbName)
+	} else {
+		fmt.Printf("Collection %s created in database %s\n", collectionName, dbName)
+	}
 
-func main() {
-	//err := godotenv.Load()
-	//err := godotenv.Load("/app/.env") //deploy staging
-	//if err != nil {
-	//	log.Fatal("Error loading .env file")
-	//	return
-	//}
-	http.HandleFunc("/send-destination", sendToDestination)
+	http.HandleFunc("/send-destination", sendToDestination(client))
 	fmt.Println(fmt.Sprintf("Server is listening on port %v...", os.Getenv("SERVER_PORT_EVENT_PROCESSOR")))
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%v", os.Getenv("SERVER_PORT_EVENT_PROCESSOR")),
