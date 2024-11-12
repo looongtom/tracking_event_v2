@@ -74,11 +74,11 @@ services:
     environment:
       - SERVER_PORT_UPDATE_EVENT=8083
 
-  event-processor:
+  event-processor-v2:
     build:
-      context: ./event-processor
+      context: ./event-processor-v2
       dockerfile: Dockerfile
-    container_name: event-processor
+    container_name: event-processor-v2
     ports:
       - "8082:8082"
     depends_on:
@@ -94,31 +94,10 @@ services:
       - MONGO_URI=mongo:27017
       - MONGO_DB=test
       - MONGO_COLLECTION=tracking_event
-
-  kafka-listener:
-    build:
-      context: ./kafka-listener
-      dockerfile: Dockerfile
-    container_name: kafka-listener
-    depends_on:
-      - kafka-broker
-      - event-processor
-    networks:
-      - custom_network
-    environment:
       - KAFKA_BROKER=kafka-broker:9092
       - KAFKA_TOPIC=tracking-event
       - KAFKA_GROUP_ID=tracking-event-group
-      - SERVER_HOST_EVENT_PROCESSOR=event-processor
-      - SERVER_PORT_EVENT_PROCESSOR=8082
-    deploy:
-      resources:
-        limits:
-          cpus: '0.25'       # Limit kafka-listener to 0.25 CPU
-          memory: 128M       # Limit kafka-listener to 128 MB
-        reservations:
-          cpus: '0.1'        # Reserve 0.1 CPU
-          memory: 64M        # Reserve 64 MB
+
 
   prometheus:
     image: prom/prometheus:latest
