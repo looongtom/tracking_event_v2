@@ -97,6 +97,8 @@ services:
       - KAFKA_BROKER=kafka-broker:9092
       - KAFKA_TOPIC=tracking-event
       - KAFKA_GROUP_ID=tracking-event-group
+    expose:
+      - "8082"
 
 
   prometheus:

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"log"
 	"math/rand"
@@ -32,9 +33,9 @@ func handleMain(w http.ResponseWriter, r *http.Request) {
 	}
 	defer p.Close()
 
-	storeID := os.Getenv("STORE_ID")
+	userID := os.Getenv("USER_ID")
 	clientID := os.Getenv("CLIENT_ID")
-	eventType := os.Getenv("EVENT_TYPE")
+	eventName := os.Getenv("EVENT_NAME")
 
 	// Group events by bucket_date
 	bucketDates := generateRandomBucketDates(5)
@@ -58,16 +59,11 @@ func handleMain(w http.ResponseWriter, r *http.Request) {
 			go func(i int) {
 				defer wg.Done()
 				tracking := model.TrackingEvent{
-					StoreId:    storeID,
-					UserId:     clientID,
+					UserId:     userID,
+					ClientId:   clientID,
 					BucketDate: bucketDate.UnixNano(),
-					EventType:  eventType,
-					Count:      1,
-					Event: model.Event{
-						ID:        fmt.Sprintf("evt%d", i+1),
-						TimeStamp: time.Now().UnixNano(),
-						Status:    randomStatus(),
-					},
+					EventName:  eventName,
+					Event:      generateMockEvent(),
 				}
 				fmt.Println(tracking)
 
@@ -137,7 +133,7 @@ func handleMainV2(w http.ResponseWriter, r *http.Request) {
 
 func generateMockData(nStores, mEventTypes, mEvents, nClients int, bucketDate time.Time, p *kafka.Producer) error {
 
-	storePrefix := "store"
+	storePrefix := "user"
 	clientPrefix := "client"
 	eventTypes := make([]string, mEventTypes)
 	for i := 0; i < mEventTypes; i++ {
@@ -153,25 +149,17 @@ func generateMockData(nStores, mEventTypes, mEvents, nClients int, bucketDate ti
 		go func(i int) {
 			defer wg.Done()
 			indexStore := rand.Intn(nStores) + 1
-			storeID := fmt.Sprintf("%s%d", storePrefix, indexStore)
+			user := fmt.Sprintf("%s%d", storePrefix, indexStore)
 			indexClient := rand.Intn(nClients) + 1
 			clientID := fmt.Sprintf("%s%d", clientPrefix, indexClient)
 			eventType := eventTypes[rand.Intn(mEventTypes)]
-			eventID := fmt.Sprintf("evt%d", i+1)
-			timestamp := bucketDate.Add(time.Duration(rand.Intn(24)) * time.Hour).Add(time.Duration(rand.Intn(60)) * time.Minute)
-			status := []string{"success", "failed"}[rand.Intn(2)]
 
-			event := model.Event{
-				ID:        eventID,
-				TimeStamp: timestamp.Unix(),
-				Status:    status,
-			}
+			event := generateMockEvent()
 			trackingEvent := model.TrackingEvent{
-				StoreId:    storeID,
-				UserId:     clientID,
+				UserId:     user,
+				ClientId:   clientID,
 				BucketDate: bucketDate.UnixNano(),
-				EventType:  eventType,
-				Count:      1,
+				EventName:  eventType,
 				Event:      event,
 			}
 			serializedBookingRequest, err := json.Marshal(trackingEvent)
@@ -257,7 +245,25 @@ func generateRandomBucketDates(numDates int) []time.Time {
 }
 
 // Helper function to generate random status
-func randomStatus() string {
-	statuses := []string{"success", "failed"}
-	return statuses[rand.Intn(len(statuses))]
+func generateMockEvent() model.Event {
+	destinations := []string{"google_analytic", "facebook", "tiktok", "pinterest", "twitter", "snapchat", "klaviyo", "google_ads"}
+	statusDest := make(map[string]bool)
+
+	// Randomly set each destination status
+	for _, dest := range destinations {
+		statusDest[dest] = rand.Intn(2) == 1
+	}
+
+	rawData := map[string]interface{}{
+		"key1": "value1",
+		"key2": rand.Float64(),
+		"key3": rand.Intn(100),
+	}
+
+	return model.Event{
+		ID:        uuid.New().String(),
+		TimeStamp: time.Now().Unix(),
+		Status:    statusDest,
+		RawData:   rawData,
+	}
 }

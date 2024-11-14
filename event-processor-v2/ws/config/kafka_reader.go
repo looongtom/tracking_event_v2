@@ -71,26 +71,24 @@ func saveInDb(ctx context.Context, client *mongo.Client, tracking model.Tracking
 	collection := db.Collection(os.Getenv("MONGO_COLLECTION"))
 	//insert trackingEvent in db
 	filter := bson.M{
-		"store_id":    tracking.StoreId,
+		"user_id":     tracking.UserId,
 		"client_id":   tracking.UserId,
 		"bucket_date": tracking.BucketDate,
-		"event_type":  tracking.EventType,
+		"event_name":  tracking.EventName,
 	}
 	update := bson.M{
 		"$setOnInsert": bson.M{
-			"store_id":    tracking.StoreId,
+			"user_id":     tracking.UserId,
 			"client_id":   tracking.UserId,
 			"bucket_date": tracking.BucketDate,
-			"event_type":  tracking.EventType,
-		},
-		"$inc": bson.M{
-			"count": tracking.Count, // Increment the count field by 1
+			"event_name":  tracking.EventName,
 		},
 		"$push": bson.M{
 			"list_event": bson.M{
 				"event_id":           tracking.Event.ID,
 				"timestamp":          tracking.Event.TimeStamp,
 				"status_destination": tracking.Event.Status,
+				"raw_data":           tracking.Event.RawData,
 			},
 		},
 	}
