@@ -14,7 +14,7 @@ func Subscribe(conn *websocket.Conn) {
 
 func SendMessage(message string) {
 	if Connection != nil {
-		fmt.Println("Pushing to web socket")
+		fmt.Println("Pushing to WebSocket with message:", message) // For debugging
 		err := Connection.WriteMessage(websocket.TextMessage, []byte(message))
 		if err != nil {
 			fmt.Println("Error during message writing:", err)

@@ -174,18 +174,30 @@ func Listen(ctx context.Context, client *mongo.Client, cb func(msg string)) {
 				}
 				fmt.Println("Receive from kafka: ", tracking)
 
-				updatedEvent, err := updateEvent(tracking.Event)
+				//updatedEvent, err := updateEvent(tracking.Event)
+				//if err != nil {
+				//	fmt.Println("error call destination: ", err)
+				//	continue
+				//}
+				//tracking.Event.Status = *updatedEvent
+
+				//delay 2s
+				//read DELAY_TIME from .env
+				delayTime, err := time.ParseDuration(os.Getenv("DELAY_TIME"))
 				if err != nil {
-					fmt.Println("error call destination: ", err)
-					continue
+					log.Println("Error parsing delay time")
+					delayTime = 500
 				}
-				tracking.Event = *updatedEvent
+
+				time.Sleep(delayTime * time.Millisecond)
 
 				serializedTracking, err := json.Marshal(tracking)
 				if err != nil {
 					fmt.Printf("Failed to marshal message: %s\n", err)
 					continue
 				}
+				fmt.Println("Serialized JSON data:", string(serializedTracking))
+
 				cb(string(serializedTracking))
 
 				saveInDb(ctx, client, tracking)

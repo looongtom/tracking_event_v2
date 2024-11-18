@@ -35,7 +35,6 @@ func handleMain(w http.ResponseWriter, r *http.Request) {
 
 	userID := os.Getenv("USER_ID")
 	clientID := os.Getenv("CLIENT_ID")
-	eventName := os.Getenv("EVENT_NAME")
 
 	// Group events by bucket_date
 	bucketDates := generateRandomBucketDates(5)
@@ -59,11 +58,12 @@ func handleMain(w http.ResponseWriter, r *http.Request) {
 			go func(i int) {
 				defer wg.Done()
 				tracking := model.TrackingEvent{
-					UserId:     userID,
-					ClientId:   clientID,
-					BucketDate: bucketDate.UnixNano(),
-					EventName:  eventName,
-					Event:      generateMockEvent(),
+					WsEventName: fmt.Sprintf("realtime_dashboard/%s", userID),
+					UserId:      userID,
+					ClientId:    clientID,
+					BucketDate:  bucketDate.UnixNano(),
+					EventName:   []string{"purchase", "init_checkout"}[rand.Intn(2)],
+					Event:       generateMockEvent(),
 				}
 				fmt.Println(tracking)
 
@@ -156,11 +156,12 @@ func generateMockData(nStores, mEventTypes, mEvents, nClients int, bucketDate ti
 
 			event := generateMockEvent()
 			trackingEvent := model.TrackingEvent{
-				UserId:     user,
-				ClientId:   clientID,
-				BucketDate: bucketDate.UnixNano(),
-				EventName:  eventType,
-				Event:      event,
+				WsEventName: fmt.Sprintf("realtime_dashboard/%s", user),
+				UserId:      user,
+				ClientId:    clientID,
+				BucketDate:  bucketDate.UnixNano(),
+				EventName:   eventType,
+				Event:       event,
 			}
 			serializedBookingRequest, err := json.Marshal(trackingEvent)
 			if err != nil {
@@ -244,26 +245,53 @@ func generateRandomBucketDates(numDates int) []time.Time {
 	return dates
 }
 
+func generateRandomStatus(destinations []string) []model.StatusValue {
+	// Randomize the number of destinations (at least 1)
+	numDestinations := rand.Intn(len(destinations)) + 1
+	status := make([]model.StatusValue, numDestinations)
+
+	// Shuffle the destinations and pick the first few
+	rand.Shuffle(len(destinations), func(i, j int) {
+		destinations[i], destinations[j] = destinations[j], destinations[i]
+	})
+
+	for i := 0; i < numDestinations; i++ {
+		status[i] = model.StatusValue{
+			DestinationName: destinations[i],
+			Status:          rand.Intn(2) == 1, // Randomly true or false
+		}
+	}
+
+	return status
+}
+
 // Helper function to generate random status
 func generateMockEvent() model.Event {
 	destinations := []string{"google_analytic", "facebook", "tiktok", "pinterest", "twitter", "snapchat", "klaviyo", "google_ads"}
-	statusDest := make(map[string]bool)
-
-	// Randomly set each destination status
-	for _, dest := range destinations {
-		statusDest[dest] = rand.Intn(2) == 1
-	}
 
 	rawData := map[string]interface{}{
-		"key1": "value1",
-		"key2": rand.Float64(),
-		"key3": rand.Intn(100),
+		"key1":              "value1",
+		"key2":              rand.Float64(),
+		"key3":              rand.Intn(100),
+		"page_url":          "https://example.com/product/123",
+		"referrer":          "https://google.com",
+		"timestamp":         "2024-11-14T15:30:00Z",
+		"user_agent":        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36",
+		"screen_resolution": "1920x1080",
+		"browser_language":  "en-US",
+		"last_touch":        "last_touch",
+		"order_value":       42,
+	}
+
+	rawDataBytes, err := json.Marshal(rawData)
+	if err != nil {
+		log.Fatalf("Error serializing raw data: %v", err)
 	}
 
 	return model.Event{
 		ID:        uuid.New().String(),
 		TimeStamp: time.Now().Unix(),
-		Status:    statusDest,
-		RawData:   rawData,
+		Status:    generateRandomStatus(destinations),
+		RawData:   rawDataBytes,
 	}
 }

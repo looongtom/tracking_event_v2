@@ -52,9 +52,9 @@ services:
       - KAFKA_BROKER=kafka-broker:9092
       - KAFKA_TOPIC=tracking-event
       - SERVER_PORT_RECEIVE_EVENT=8081
-      - STORE_ID=store2
+      - USER_ID=6732cd79d221e70d2025fb2e
       - CLIENT_ID=client2
-      - EVENT_TYPE=add_to_cart
+      - EVENT_NAME=add_to_cart
       - MAX_AMOUNT_EVENT=100
       - TOTAL_STORE=5
       - TOTAL_CLIENT=5
@@ -73,6 +73,7 @@ services:
       - custom_network
     environment:
       - SERVER_PORT_UPDATE_EVENT=8083
+      - DELAY_TIME=500ms
 
   event-processor-v2:
     build:
@@ -101,67 +102,10 @@ services:
       - "8082"
 
 
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - /mnt/d/kienletv/prometheus-grafana/prometheus:/etc/prometheus
-      - prometheus-data:/prometheus
-#    sudo mount --make-rshared /
-    restart: unless-stopped
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    ports:
-      - "3000:3000"
-    volumes:
-      - grafana-data:/var/lib/grafana
-    environment:
-      - 'GF_SMTP_ENABLED=true'
-      - 'GF_SMTP_HOST=smtp.gmail.com:587'
-      - 'GF_SMTP_USER=user1@gmail.com'
-      - 'GF_SMTP_PASSWORD=mysamplePassword'
-      - 'GF_SMTP_FROM_ADDRESS=user1@gmail.com'
-    #      - 'GF_SERVER_DOMAIN=grafana.my.domain'
-    #      - 'GF_SERVER_ROOT_URL=grafana.my.domain'
-    restart: unless-stopped
-  node_exporter:
-    image: quay.io/prometheus/node-exporter:latest
-    container_name: node_exporter
-    command:
-      - '--path.rootfs=/host'
-    pid: host
-    restart: unless-stopped
-    volumes:
-      - '/proc:/host/proc:ro'
-      - '/sys:/host/sys:ro'
-      - '/:/host:ro,rslave'
-  cadvisor:
-    image: google/cadvisor:latest
-    container_name: cadvisor
-    # ports:
-    #   - "8080:8080"
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-      - /dev/disk/:/dev/disk:ro
-    devices:
-      - /dev/kmsg
 
 volumes:
   kafka-volume:
   zookeeper-volume:
-  prometheus-data:
-    driver: local
-  grafana-data:
-    driver: local
 
 networks:
   custom_network:

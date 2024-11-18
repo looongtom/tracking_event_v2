@@ -28,7 +28,13 @@ func updateEventStatus(w http.ResponseWriter, r *http.Request) {
 	// Update the status of the event
 	event.Status = "updated"
 
-	time.Sleep(500 * time.Millisecond)
+	delayTime, err := time.ParseDuration(os.Getenv("DELAY_TIME"))
+	if err != nil {
+		log.Println("Error parsing delay time")
+		delayTime = 500
+	}
+
+	time.Sleep(delayTime * time.Millisecond)
 
 	// Encode the updated event back to the response
 	w.Header().Set("Content-Type", "application/json")
