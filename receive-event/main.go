@@ -32,101 +32,14 @@ func handleMain(w http.ResponseWriter, r *http.Request) {
 	}
 	defer p.Close()
 
-	storeID := os.Getenv("STORE_ID")
-	clientID := os.Getenv("CLIENT_ID")
-	eventType := os.Getenv("EVENT_TYPE")
-
-	// Group events by bucket_date
-	bucketDates := generateRandomBucketDates(5)
-
-	// Generate and insert documents
-	for _, bucketDate := range bucketDates {
-		var wg sync.WaitGroup
-
-		// Generate multiple events within the list
-		maxCount := os.Getenv("MAX_AMOUNT_EVENT")
-		count, ok := strconv.Atoi(maxCount)
-		if ok != nil {
-			fmt.Println("Error: ", ok)
-			fmt.Println("set max value into 10")
-			count = 10
-		}
-		errChan := make(chan error, count)
-		fmt.Println("Count: ", count)
-		for i := 0; i < count; i++ {
-			wg.Add(1)
-			go func(i int) {
-				defer wg.Done()
-				tracking := model.TrackingEvent{
-					StoreId:    storeID,
-					UserId:     clientID,
-					BucketDate: bucketDate.UnixNano(),
-					EventType:  eventType,
-					Count:      1,
-					Event: model.Event{
-						ID:        fmt.Sprintf("evt%d", i+1),
-						TimeStamp: time.Now().UnixNano(),
-						Status:    randomStatus(),
-					},
-				}
-				fmt.Println(tracking)
-
-				serializedBookingRequest, err := json.Marshal(tracking)
-				if err != nil {
-					//http.Error(w, fmt.Sprintf("Failed to serialize booking request: %s", err), http.StatusInternalServerError)
-					errChan <- fmt.Errorf("Failed to serialize booking request: %s", err)
-					return
-				}
-
-				// Produce the message to the Kafka topic
-				err = produceMessage(p, topic, serializedBookingRequest)
-				if err != nil {
-					//http.Error(w, fmt.Sprintf("Failed to produce message: %s", err), http.StatusInternalServerError)
-					errChan <- fmt.Errorf("Failed to produce message: %s", err)
-					return
-				}
-				errChan <- nil
-			}(i)
-		}
-		wg.Wait()
-		close(errChan)
-
-		for err := range errChan {
-			if err != nil {
-				fmt.Println(err)
-				http.Error(w, fmt.Sprintf("Error: %s", err), http.StatusInternalServerError)
-			}
-		}
-
-		fmt.Println("===========================Message produced successfully!=============================")
-	}
-
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Main function executed successfully"))
-}
-
-func handleMainV2(w http.ResponseWriter, r *http.Request) {
-	// log current time
-	fmt.Println("start time:", time.Now())
-
-	// Create a new Kafka producer
-	p, err := kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": kafkaBroker})
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to create producer: %s", err), http.StatusInternalServerError)
-		return
-	}
-	defer p.Close()
-
-	totalStore := os.Getenv("TOTAL_STORE")
-	totalStoreValue, _ := strconv.Atoi(totalStore)
 	totalClient := os.Getenv("TOTAL_CLIENT")
 	totalClientValue, _ := strconv.Atoi(totalClient)
 	totalEventType := os.Getenv("TOTAL_EVENT_TYPE")
 	totalEventTypeValue, _ := strconv.Atoi(totalEventType)
 	maxEvent, _ := strconv.Atoi(os.Getenv("MAX_AMOUNT_EVENT"))
+	userID := os.Getenv("USER_ID")
 
-	err = generateMockData(totalStoreValue, totalEventTypeValue, maxEvent, totalClientValue, time.Now(), p)
-
+	err = generateMockData(totalEventTypeValue, maxEvent, totalClientValue, userID, time.Now(), p)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to generate mock data: %s", err), http.StatusInternalServerError)
 	}
@@ -135,9 +48,82 @@ func handleMainV2(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Main function executed successfully"))
 }
 
-func generateMockData(nStores, mEventTypes, mEvents, nClients int, bucketDate time.Time, p *kafka.Producer) error {
+func generateRandomStatus(destinations []string) []model.StatusValue {
+	// Randomize the number of destinations (at least 1)
+	numDestinations := rand.Intn(len(destinations)) + 1
+	status := make([]model.StatusValue, numDestinations)
 
-	storePrefix := "store"
+	// Shuffle the destinations and pick the first few
+	rand.Shuffle(len(destinations), func(i, j int) {
+		destinations[i], destinations[j] = destinations[j], destinations[i]
+	})
+
+	for i := 0; i < numDestinations; i++ {
+		status[i] = model.StatusValue{
+			DestinationName: destinations[i],
+			Status:          rand.Intn(2) == 1, // Randomly true or false
+		}
+	}
+
+	return status
+}
+
+func generateMockEvent() []byte {
+	rawData := map[string]interface{}{
+		"key1":              "value1",
+		"key2":              rand.Float64(),
+		"key3":              rand.Intn(100),
+		"page_url":          "https://example.com/product/123",
+		"referrer":          "https://google.com",
+		"timestamp":         "2024-11-14T15:30:00Z",
+		"user_agent":        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36",
+		"screen_resolution": "1920x1080",
+		"browser_language":  "en-US",
+		"last_touch":        "last_touch",
+		"order_value":       42,
+	}
+
+	rawDataBytes, err := json.Marshal(rawData)
+	if err != nil {
+		log.Fatalf("Error serializing raw data: %v", err)
+	}
+
+	return rawDataBytes
+}
+
+//func handleMainV2(w http.ResponseWriter, r *http.Request) {
+//	// log current time
+//	fmt.Println("start time:", time.Now())
+//
+//	// Create a new Kafka producer
+//	p, err := kafka.NewProducer(&kafka.ConfigMap{"bootstrap.servers": kafkaBroker})
+//	if err != nil {
+//		http.Error(w, fmt.Sprintf("Failed to create producer: %s", err), http.StatusInternalServerError)
+//		return
+//	}
+//	defer p.Close()
+//
+//	totalStore := os.Getenv("TOTAL_STORE")
+//	totalStoreValue, _ := strconv.Atoi(totalStore)
+//	totalClient := os.Getenv("TOTAL_CLIENT")
+//	totalClientValue, _ := strconv.Atoi(totalClient)
+//	totalEventType := os.Getenv("TOTAL_EVENT_TYPE")
+//	totalEventTypeValue, _ := strconv.Atoi(totalEventType)
+//	maxEvent, _ := strconv.Atoi(os.Getenv("MAX_AMOUNT_EVENT"))
+//
+//	err = generateMockData( totalEventTypeValue, maxEvent, totalClientValue, time.Now(), p)
+//
+//	if err != nil {
+//		http.Error(w, fmt.Sprintf("Failed to generate mock data: %s", err), http.StatusInternalServerError)
+//	}
+//
+//	w.WriteHeader(http.StatusOK)
+//	w.Write([]byte("Main function executed successfully"))
+//}
+
+func generateMockData(mEventTypes, mEvents, nClients int, userId string, bucketDate time.Time, p *kafka.Producer) error {
+	destinations := []string{"google_analytic", "facebook", "tiktok", "pinterest", "twitter", "snapchat", "klaviyo", "google_ads"}
+
 	clientPrefix := "client"
 	eventTypes := make([]string, mEventTypes)
 	for i := 0; i < mEventTypes; i++ {
@@ -152,24 +138,18 @@ func generateMockData(nStores, mEventTypes, mEvents, nClients int, bucketDate ti
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			indexStore := rand.Intn(nStores) + 1
-			storeID := fmt.Sprintf("%s%d", storePrefix, indexStore)
 			indexClient := rand.Intn(nClients) + 1
 			clientID := fmt.Sprintf("%s%d", clientPrefix, indexClient)
-			eventType := eventTypes[rand.Intn(mEventTypes)]
-			eventID := fmt.Sprintf("evt%d", i+1)
 			timestamp := bucketDate.Add(time.Duration(rand.Intn(24)) * time.Hour).Add(time.Duration(rand.Intn(60)) * time.Minute)
-			status := []string{"success", "failed"}[rand.Intn(2)]
 
 			sentEvent := model.EventRecord{
-				ID:                eventID,
-				ClientID:          clientID,
-				StoreID:           storeID,
-				EventType:         eventType,
-				StatusDestination: status,
-				EventID:           eventID,
-				Timestamp:         timestamp.Unix(),
-				BucketDate:        bucketDate.Format("02-01-2006"),
+				UserId:      userId,
+				ClientID:    clientID,
+				Status:      generateRandomStatus(destinations),
+				EventName:   []string{"purchase", "init_checkout"}[rand.Intn(2)],
+				Timestamp:   timestamp.Unix(),
+				RawData:     generateMockEvent(),
+				WsEventName: fmt.Sprintf("realtime_dashboard/%s", userId),
 			}
 			serializedBookingRequest, err := json.Marshal(sentEvent)
 			if err != nil {
@@ -211,7 +191,6 @@ func main() {
 	topic = os.Getenv("KAFKA_TOPIC")
 
 	http.HandleFunc("/receive-event", handleMain)
-	http.HandleFunc("/receive-event-v2", handleMainV2)
 	fmt.Println(fmt.Sprintf("Server is listening on port %v...", os.Getenv("SERVER_PORT_RECEIVE_EVENT")))
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%v", os.Getenv("SERVER_PORT_RECEIVE_EVENT")),

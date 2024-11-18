@@ -1,41 +1,40 @@
 services:
-  kafka-zookeeper:
-    container_name: kafka-zookeeper
-    image: "bitnami/zookeeper:3.8.4"
-    ports:
-      - "2181:2181"
-    environment:
-      - ALLOW_ANONYMOUS_LOGIN=yes
-    networks:
-      - custom_network
-
-  kafka-broker:
-    container_name: kafka-brooker
-    image: "bitnami/kafka:3.3.2"
-    ports:
-      - "9092:9092"
-      - "9093:9093"
-    environment:
-      - KAFKA_BROKER_ID=1
-      - ALLOW_PLAINTEXT_LISTENER=yes
-      - KAFKA_CFG_ZOOKEEPER_CONNECT=kafka-zookeeper:2181
-      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CLIENT:PLAINTEXT,EXTERNAL:PLAINTEXT
-      - KAFKA_CFG_LISTENERS=CLIENT://:9092,EXTERNAL://:9093
-      - KAFKA_CFG_ADVERTISED_LISTENERS=CLIENT://kafka-broker:9092,EXTERNAL://localhost:9093
-      - KAFKA_INTER_BROKER_LISTENER_NAME=CLIENT
-    depends_on:
-      - kafka-zookeeper
-    networks:
-      - custom_network
-
-
-  mongo:
-    image: mongo:latest
-    container_name: mongo
-    ports:
-      - "27017:27017"
-    networks:
-      - custom_network
+  #  kafka-zookeeper:
+  #    container_name: kafka-zookeeper
+  #    image: "bitnami/zookeeper:3.8.4"
+  #    ports:
+  #      - "2181:2181"
+  #    environment:
+  #      - ALLOW_ANONYMOUS_LOGIN=yes
+  #    networks:
+  #      - tracking_network
+  #    deploy:
+  #      resources:
+  #        limits:
+  #          memory: "512M" # 512 MB of RAM
+  #
+  #  kafka-broker:
+  #    container_name: kafka-broker
+  #    image: "bitnami/kafka:3.3.2"
+  #    ports:
+  #      - "9092:9092"
+  #      - "9093:9093"
+  #    environment:
+  #      - KAFKA_BROKER_ID=1
+  #      - ALLOW_PLAINTEXT_LISTENER=yes
+  #      - KAFKA_CFG_ZOOKEEPER_CONNECT=kafka-zookeeper:2181
+  #      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CLIENT:PLAINTEXT,EXTERNAL:PLAINTEXT
+  #      - KAFKA_CFG_LISTENERS=CLIENT://:9092,EXTERNAL://:9093
+  #      - KAFKA_CFG_ADVERTISED_LISTENERS=CLIENT://kafka-broker:9092,EXTERNAL://localhost:9093
+  #      - KAFKA_INTER_BROKER_LISTENER_NAME=CLIENT
+  #    depends_on:
+  #      - kafka-zookeeper
+  #    networks:
+  #      - tracking_network
+  #    deploy:
+  #      resources:
+  #        limits:
+  #          memory: "1G" # 1 GB of RAM
 
   receive-event:
     build:
@@ -44,145 +43,69 @@ services:
     container_name: receive-event
     ports:
       - "8081:8081"
-    depends_on:
-      - kafka-broker
     networks:
-      - custom_network
+      - tagfly_backend_net
     environment:
-      - KAFKA_BROKER=kafka-broker:9092
+      - KAFKA_BROKER=0.tcp.ap.ngrok.io:15985
       - KAFKA_TOPIC=tracking-event
       - SERVER_PORT_RECEIVE_EVENT=8081
-      - STORE_ID=store2
+      - USER_ID=6732cd79d221e70d2025fb2e
       - CLIENT_ID=client2
-      - EVENT_TYPE=add_to_cart
-      - MAX_AMOUNT_EVENT=2000
+      - EVENT_NAME=add_to_cart
+      - MAX_AMOUNT_EVENT=100
       - TOTAL_STORE=5
       - TOTAL_CLIENT=5
       - TOTAL_EVENT_TYPE=5
 
-  upload-event:
-    build:
-      context: ./upload-event
-      dockerfile: Dockerfile
-    container_name: upload-event
+  mongo:
+    image: mongo:7.0
+    container_name: mongo
     ports:
-      - "8083:8083"
-    depends_on:
-      - kafka-broker
-    networks:
-      - custom_network
+      - "27017:27017"
     environment:
-      - SERVER_PORT_UPDATE_EVENT=8083
-
-  event-processor:
-    build:
-      context: ./event-processor
-      dockerfile: Dockerfile
-    container_name: event-processor
-    ports:
-      - "8082:8082"
-    depends_on:
-      - kafka-broker
-      - mongo
-      - upload-event
+      - MONGO_HOST=mongo
+      - MONGO_PORT=27017
+      - MONGO_DATABASE=tagfly
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=secret
     networks:
-      - custom_network
-    environment:
-      - SERVER_PORT_EVENT_PROCESSOR=8082
-      - SERVER_UPDATE_EVENT=upload-event
-      - SERVER_PORT_UPDATE_EVENT=8083
-      - MONGO_URI=mongo:27017
-      - MONGO_DB=test
-      - MONGO_COLLECTION=tracking_event
-
-  kafka-listener:
-    build:
-      context: ./kafka-listener
-      dockerfile: Dockerfile
-    container_name: kafka-listener
-    depends_on:
-      - kafka-broker
-      - event-processor
-    networks:
-      - custom_network
-    environment:
-      - KAFKA_BROKER=kafka-broker:9092
-      - KAFKA_TOPIC=tracking-event
-      - KAFKA_GROUP_ID=tracking-event-group
-      - SERVER_HOST_EVENT_PROCESSOR=event-processor
-      - SERVER_PORT_EVENT_PROCESSOR=8082
+      - tagfly_backend_net
     deploy:
       resources:
         limits:
-          cpus: '0.25'       # Limit kafka-listener to 0.25 CPU
-          memory: 128M       # Limit kafka-listener to 128 MB
-        reservations:
-          cpus: '0.1'        # Reserve 0.1 CPU
-          memory: 64M        # Reserve 64 MB
+          memory: "130M" # 256 MB of RAM
 
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
+  event-processor-v2:
+    build:
+      context: ./event-processor-v2
+      dockerfile: Dockerfile
+    container_name: event-processor-v2
     ports:
-      - "9090:9090"
-    volumes:
-      - /mnt/d/kienletv/prometheus-grafana/prometheus:/etc/prometheus
-      - prometheus-data:/prometheus
-#    sudo mount --make-rshared /
-    restart: unless-stopped
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    ports:
-      - "3000:3000"
-    volumes:
-      - grafana-data:/var/lib/grafana
+      - "8082:8082"
+    depends_on:
+      - mongo
+    networks:
+      - tagfly_backend_net
     environment:
-      - 'GF_SMTP_ENABLED=true'
-      - 'GF_SMTP_HOST=smtp.gmail.com:587'
-      - 'GF_SMTP_USER=user1@gmail.com'
-      - 'GF_SMTP_PASSWORD=mysamplePassword'
-      - 'GF_SMTP_FROM_ADDRESS=user1@gmail.com'
-    #      - 'GF_SERVER_DOMAIN=grafana.my.domain'
-    #      - 'GF_SERVER_ROOT_URL=grafana.my.domain'
-    restart: unless-stopped
-  node_exporter:
-    image: quay.io/prometheus/node-exporter:latest
-    container_name: node_exporter
-    command:
-      - '--path.rootfs=/host'
-    pid: host
-    restart: unless-stopped
-    volumes:
-      - '/proc:/host/proc:ro'
-      - '/sys:/host/sys:ro'
-      - '/:/host:ro,rslave'
-  cadvisor:
-    image: google/cadvisor:latest
-    container_name: cadvisor
-    # ports:
-    #   - "8080:8080"
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-      - /dev/disk/:/dev/disk:ro
-    devices:
-      - /dev/kmsg
-
-volumes:
-  kafka-volume:
-  zookeeper-volume:
-  prometheus-data:
-    driver: local
-  grafana-data:
-    driver: local
+      - SERVER_PORT_EVENT_PROCESSOR=8082
+      - SERVER_PORT_UPDATE_EVENT=8083
+      - MONGO_COLLECTION=tracking_event
+      - KAFKA_BROKER=0.tcp.ap.ngrok.io:15985
+      - KAFKA_TOPIC=tracking-event
+      - KAFKA_GROUP_ID=tracking-event-group
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=secret
+      - MONGO_HOST=mongo
+      - MONGO_PORT=27017
+      - MONGO_DATABASE=tagfly
+      - MONGO_URI=mongo:27017
+    deploy:
+      resources:
+        limits:
+          memory: "256M" # 256 MB of RAM
+    expose:
+      - "8082"
 
 networks:
-  custom_network:
+  tagfly_backend_net:
     driver: bridge
-

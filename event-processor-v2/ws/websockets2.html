@@ -1,0 +1,14 @@
+<pre id="output"></pre>
+<script>
+    var output = document.getElementById("output");
+    var socket = new WebSocket("ws://localhost:8082/socket");
+
+    socket.onopen = function () {
+        output.innerHTML += "Status: Connected\n";
+    };
+
+    socket.onmessage = function (e) {
+        output.innerHTML += "Tracking event: " + e.data + "\n";
+    };
+
+</script>
